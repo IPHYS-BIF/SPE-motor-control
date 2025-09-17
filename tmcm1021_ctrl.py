@@ -12,8 +12,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QObject, Slot, Signal, Property
 from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 
-_STEPS_PER_TURN = 200
-
+STEPS_PER_TURN = 200
+VERTICAL_TRAVEL_PER_TURN = 6 # in mm
+DEFAULT_VELOCITY = 1000 # in pps
 
 class Motor(QObject):
     
@@ -25,6 +26,7 @@ class Motor(QObject):
         self.interface = None
         self.zero_position = 0
         self._MICROSTEP = 8
+        self.velocity_pps = DEFAULT_VELOCITY # default pulses per second
         
     
     def init_motor(self, axis): # normali axis (self, axisOne, axisTwo)
@@ -52,20 +54,20 @@ class Motor(QObject):
        # with self.interface.connect() as interface:
         print(self.motor)
         self._MICROSTEP = microstep
-        self.motor.drive_settings.set_max_current(192) # 152..159 is 1.963 [A] motor current manual p. 22 (single motor 72)
+        self.motor.drive_settings.set_max_current(192)
         self.motor.drive_settings.set_standby_current(0)
-        self.motor.drive_settings.set_microstep_resolution(self._MICROSTEP) # 0 is none 8 is 256
+        self.motor.set_axis_parameter(self.motor.AP.MicrostepResolution, self._MICROSTEP) # 0 is none 8 is 256
         self.motor.set_axis_parameter(self.motor.AP.EncoderPrescaler, 25600)
                
     @Slot()
     def move_closer(self):
         print("Moving Closer ...")
-        self.motor.rotate(1000)
+        self.motor.rotate(self.velocity_pps)
         
     @Slot()
     def move_further(self, direction = -1):
         print("Moving Further ...")
-        self.motor.rotate(1000*direction)
+        self.motor.rotate(self.velocity_pps*direction)
     
     @Slot()
     def stop_move(self):
@@ -75,10 +77,9 @@ class Motor(QObject):
     
     def move_by(self, n_steps, dir):
         """
-        Method to move on the desired axis by some margin [%] in given direction (dir).
+        Method to move by some margin [%] in given direction (dir).
 
         Args:
-            active_motor (str): axis of the movement; "Biaxial", "Axis 1" or "Axis 2"
             n_steps (int): number of steps that the motor should perform
             dir (int): direction of the movement, it either closes or opens; values={-1;1}
         
@@ -97,3 +98,11 @@ class Motor(QObject):
     def zero_distance(self):
         self.motor.actual_position = 0
         self.motor.set_axis_parameter(self.motor.AP.EncoderPosition, 0)
+    @Slot(float)
+    def set_velocity(self, velocity_vertical:float):
+        velocity_vertical_mm = velocity_vertical / 1000
+        print(f"Setting velocity to {velocity_vertical_mm} mm/s")
+        self.velocity_pps = int(velocity_vertical_mm * STEPS_PER_TURN * self._MICROSTEP / VERTICAL_TRAVEL_PER_TURN)
+        print(f"Velocity in pps: {self.velocity_pps}")
+        if self.velocity_pps < 1:
+            self.velocity_pps = 1

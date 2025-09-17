@@ -23,18 +23,18 @@ ApplicationWindow{
         spacing: 10
         anchors.fill: parent  
         RowLayout {
-            spacing: 20
-            
+            spacing: 10
+            Layout.preferredWidth: parent.width
             // Motor controls
             GroupBox {
                 id: motor_ui
                 title: qsTr("Move axis")
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
 
                 ColumnLayout{
-                    spacing: 10
+                    anchors.fill: parent
+                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     Button {
                         id: axis_closer
                         text: qsTr("Closer")
@@ -81,33 +81,44 @@ ApplicationWindow{
 
             GroupBox {
                 title: qsTr("Movement settings")
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                 
                 ColumnLayout{
-                    spacing: 10
-                    
+                    Layout.alignment: Qt.AlignTop
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                
                     ComboBox {
                             id: velocityBox
-                            model: ["0.5 m/s", "1.0 m/s", "2.0 m/s", "5.0 m/s"]
+                            // model: ["0.5 µm/s", "1.0 µm/s", "2.0 µm/s", "5.0 µm/s"]
+                            model: ListModel {
+                                ListElement {text: "1 mm/s"; value: 1000}
+                                ListElement {text: "500 µm/s"; value: 500}
+                                ListElement {text: "250 µm/s"; value: 250}
+                                ListElement {text: "100 µm/s"; value: 100}
+                                ListElement {text: "50 µm/s"; value: 50}
+                            }
                             currentIndex: 1
                             Material.background: Material.color(Material.Blue, Material.Shade700)
-                        }
+                            onActivated: {
+                                var velocityVertical = velocityBox.currentItem.value
+                                motorCtrl.set_velocity(velocityVertical)
+                                status_bar1.text = "Velocity set to " + velocityBox.currentItem.text
+                            }
+                    }
 
-                        TextField {
-                            id: heightInput
-                            placeholderText: "Height (mm)"
-                            validator: DoubleValidator { bottom: 0.0; decimals: 2 }
-                            inputMethodHints: Qt.ImhFormattedNumbersOnly
-                        }
+                    TextField {
+                        id: heightInput
+                        placeholderText: "Height (mm)"
+                        validator: DoubleValidator { bottom: 0.0; decimals: 2 }
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                    }
 
-                        TextField {
-                            id: deformationInput
-                            placeholderText: "Deformation (mm)"
-                            validator: DoubleValidator { bottom: 0.0; decimals: 2 }
-                            inputMethodHints: Qt.ImhFormattedNumbersOnly
-                        }
+                    TextField {
+                        id: deformationInput
+                        placeholderText: "Deformation (mm)"
+                        validator: DoubleValidator { bottom: 0.0; decimals: 2 }
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                    }
 
                     Button {
                         id: stop_experiment
