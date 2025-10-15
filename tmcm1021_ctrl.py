@@ -14,9 +14,10 @@ from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 
 STEPS_PER_TURN = 200
 VERTICAL_TRAVEL_PER_TURN = 6 # in mm
-DEFAULT_VELOCITY = 1000 # in pps
+DEFAULT_VELOCITY = 500   # in um/s
 
 class Motor(QObject):
+    actualPosition = Signal(float)
     
     def __init__(self):
         QObject.__init__(self)
@@ -26,28 +27,22 @@ class Motor(QObject):
         self.interface = None
         self.zero_position = 0
         self._MICROSTEP = 8
-        self.velocity_pps = DEFAULT_VELOCITY # default pulses per second
+        self.velocity_pps = 4000
         
     
     def init_motor(self, axis): # normali axis (self, axisOne, axisTwo)
-        COM_available = list(list_ports.comports())
-        print(COM_available)
-        COM_port_list = list(i.device for i in COM_available if i.serial_number == "TMCSTEP")
-        for i in COM_available:
-            print(i.device) 
-        # if len(COM_port_list) == 1:
-        #     COM_port_active = COM_port_list[0] 
-        #     self.port = COM_port_active
-        #     interface = UsbTmclInterface(self.port)
-        #     self.module = TMCM1021(interface)
-        #     self.motor = self.module.motors[axis]
-        #     self.interface = interface
-
-        self.port = "COM10"
+        # COM_available = list_ports.comports()
+        # COM_port_list = list(i.serial_number for i in COM_available)
+        # self.port = "COM10"
+        ports = list_ports.comports()
+        for port in ports:
+            if 'CH340' in port.description:
+                self.port = port.device
         interface = UsbTmclInterface(self.port, datarate=9600)
         self.module = TMCM1021(interface)
         self.motor = self.module.motors[axis]
         self.interface = interface
+        self.set_velocity(DEFAULT_VELOCITY) # default pulses per second
 
             
     def set_motor_default(self, microstep):
@@ -60,13 +55,13 @@ class Motor(QObject):
         self.motor.set_axis_parameter(self.motor.AP.EncoderPrescaler, 25600)
                
     @Slot()
-    def move_closer(self):
-        print("Moving Closer ...")
+    def move_further(self):
+        print("Moving down ...")
         self.motor.rotate(self.velocity_pps)
         
     @Slot()
-    def move_further(self, direction = -1):
-        print("Moving Further ...")
+    def move_closer(self, direction = -1):
+        print("Moving up ...")
         self.motor.rotate(self.velocity_pps*direction)
     
     @Slot()
@@ -87,7 +82,7 @@ class Motor(QObject):
             None
         """
         print("Moving Closer by margin {}".format(n_steps))
-        self.motor.move_by(n_steps*dir)
+        self.motor.move_by(n_steps*dir, self.velocity_pps)
         while not(self.motor.get_position_reached()):
             time.sleep(0.01)
                 
@@ -98,11 +93,34 @@ class Motor(QObject):
     def zero_distance(self):
         self.motor.actual_position = 0
         self.motor.set_axis_parameter(self.motor.AP.EncoderPosition, 0)
+
     @Slot(float)
-    def set_velocity(self, velocity_vertical:float):
+    def set_velocity(self, velocity_vertical: float):
         velocity_vertical_mm = velocity_vertical / 1000
-        print(f"Setting velocity to {velocity_vertical_mm} mm/s")
-        self.velocity_pps = int(velocity_vertical_mm * STEPS_PER_TURN * self._MICROSTEP / VERTICAL_TRAVEL_PER_TURN)
-        print(f"Velocity in pps: {self.velocity_pps}")
+        self.velocity_pps = int(velocity_vertical_mm * STEPS_PER_TURN * 2**self._MICROSTEP / VERTICAL_TRAVEL_PER_TURN)
         if self.velocity_pps < 1:
             self.velocity_pps = 1
+
+    @Slot(float)
+    def set_sample_height(self, height: float):
+        self.sample_height = height
+
+    @Slot(float)
+    def set_sample_deformation(self, deformation: float):
+        self.sample_deformation = deformation
+
+    @Slot()
+    def send_position(self):
+        encoder_pos = toSigned32(self.motor.get_axis_parameter(self.motor.AP.EncoderPosition))
+        vertical_pos = VERTICAL_TRAVEL_PER_TURN * encoder_pos / (STEPS_PER_TURN * 2**self._MICROSTEP)
+        self.actualPosition.emit(vertical_pos)
+
+    @Slot()
+    def deform_sample(self):
+        x = self.sample_height * self.sample_deformation / 100
+        steps = int(x * STEPS_PER_TURN * 2**self._MICROSTEP / VERTICAL_TRAVEL_PER_TURN)
+        self.move_by(steps, -1)
+
+def toSigned32(n: int) -> int:
+    n = n & 0xffffffff
+    return (n ^ 0x80000000) - 0x80000000

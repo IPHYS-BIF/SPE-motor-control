@@ -9,7 +9,7 @@ import QtCharts 2.15
 ApplicationWindow{    
     id: window
     width: 500
-    height: 320 
+    height: 450 
     visible: true
     title: qsTr("SPE stepper control")
     flags: Qt.WindowCloseButtonHint | Qt.CustomizeWindowHint | Qt.WindowMinimizeButtonHint | Qt.Dialog | Qt.WindowTitleHint
@@ -18,6 +18,14 @@ ApplicationWindow{
     
     // set variables
     property int button_width: 120
+    property real currentSampleHeight: 0
+
+    Timer {
+        interval: 250; running: true; repeat: true
+        onTriggered: {
+            motorCtrl.send_position()
+        }
+    }
 
     ColumnLayout {
         spacing: 10
@@ -37,10 +45,10 @@ ApplicationWindow{
                     Layout.fillHeight: true
                     Button {
                         id: axis_closer
-                        text: qsTr("Closer")
+                        text: qsTr("Down")
                         onPressed: {
-                            motorCtrl.move_closer()
-                            status_bar1.text = "Moving closer ..."       
+                            motorCtrl.move_further()
+                            status_bar1.text = "Moving down ..."       
                         }
                         onReleased: {
                             motorCtrl.stop_move()
@@ -54,10 +62,10 @@ ApplicationWindow{
                     
                     Button {
                         id: axis_further
-                        text: qsTr("Further")
+                        text: qsTr("Up")
                         onPressed: {
-                            motorCtrl.move_further()
-                            status_bar1.text = "Moving further..."
+                            motorCtrl.move_closer()
+                            status_bar1.text = "Moving up..."
                         }
                         onReleased: {
                             status_bar1.text = "Ready"
@@ -74,6 +82,13 @@ ApplicationWindow{
                         Layout.fillWidth: true
                         text: qsTr("Zero\nDistance")
                         onClicked: motorCtrl.zero_distance()
+                    }
+
+                    Button {
+                        id: startDeformButton
+                        Material.background: Material.color(Material.Green, Material.Shade700)
+                        text: qsTr("Start deformation")
+                        onClicked: motorCtrl.deform_sample()
                     }
 
                 }
@@ -97,36 +112,56 @@ ApplicationWindow{
                                 ListElement {text: "100 µm/s"; value: 100}
                                 ListElement {text: "50 µm/s"; value: 50}
                             }
+                            delegate: ItemDelegate {
+                                text: model.text
+                                width: velocityBox.width
+                            }
+                            textRole: "text"
                             currentIndex: 1
                             Material.background: Material.color(Material.Blue, Material.Shade700)
                             onActivated: {
-                                var velocityVertical = velocityBox.currentItem.value
+                                var velocityVertical = velocityBox.model.get(velocityBox.currentIndex).value
                                 motorCtrl.set_velocity(velocityVertical)
-                                status_bar1.text = "Velocity set to " + velocityBox.currentItem.text
+                                status_bar1.text = "Velocity set to " + velocityBox.model.get(velocityBox.currentIndex).text
                             }
                     }
 
                     TextField {
                         id: heightInput
                         placeholderText: "Height (mm)"
-                        validator: DoubleValidator { bottom: 0.0; decimals: 2 }
+                        validator: DoubleValidator { bottom: 0.0; decimals: 3 }
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        onEditingFinished: {
+                            motorCtrl.set_sample_height(parseFloat(heightInput.text))
+                        }
                     }
 
                     TextField {
                         id: deformationInput
-                        placeholderText: "Deformation (mm)"
+                        placeholderText: "Deformation (%)"
                         validator: DoubleValidator { bottom: 0.0; decimals: 2 }
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        onEditingFinished: {
+                            motorCtrl.set_sample_deformation(parseFloat(deformationInput.text))
+                        }
                     }
 
+
                     Button {
-                        id: stop_experiment
+                        id: stop_movement
                         Material.background: Material.color(Material.Red, Material.Shade700)
                         text: qsTr("Stop")
                         onClicked: motorCtrl.stop_move()
                     }
                 }
+            }
+        }
+        GroupBox {
+            id: infoBox
+            title: qsTr("Info box")
+            Text {
+                text: "Current distance: " + currentSampleHeight.toFixed(3) + " mm"
+                color: 'white'
             }
         }
         Rectangle {
@@ -139,6 +174,13 @@ ApplicationWindow{
                 color: "white"
                 font.pointSize: 12
             }     
+        }
+    }
+
+    Connections {
+        target: motorCtrl
+        function onActualPosition(pos) {
+            currentSampleHeight = pos
         }
     }
 }
